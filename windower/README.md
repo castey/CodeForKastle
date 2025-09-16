@@ -3,8 +3,12 @@
 - Takes in an array and converts to numpy array
 - Optional sort()
 - Applies min-max normalization
-- Creates window nodes recursively at depth n, splitting the sequence at each pass
+- Creates window (class) nodes recursively at depth n, splitting the sequence at each pass
 - Optional print
+
+## Key functions
+- run_windower_pipeline()
+- windower()
 
 ## Example Output
 
