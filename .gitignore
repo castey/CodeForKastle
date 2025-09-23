@@ -1,0 +1,5 @@
+syn-ant/
+paper-scraper/.env
+paper-scraper/downloads
+__pycache__/
+.DS_Store
