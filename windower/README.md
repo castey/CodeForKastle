@@ -6,6 +6,8 @@
 - recursively "windows" entities in that range
 - outputs a turtle file of the entities related to their windows and which entities their associated value are lesser than
 
+- [turtle file from sample run 9/24](./kg.ttl)
+
 ## Usage and Example Output
 
 ```
