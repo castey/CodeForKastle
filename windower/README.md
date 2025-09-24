@@ -4,7 +4,7 @@
 - generates a random value within a range associated with each entity
 - min max scales the values in that range 
 - recursively "windows" entities in that range
-- outputs a turtle file of the entities related to their windows and which entities their associated value are lesser than
+- outputs a turtle file of the entities related to their windows and which entities their associated values are lesser than
 
 - [turtle file from sample run 9/24](./kg.ttl)
 
