@@ -1,7 +1,7 @@
 # Windower pipeline
 
 - generates n entities 
-- generates a random value within a range associated with each entity
+- generates a random value within a range according to either a normal or uniform distribution associated with each entity
 - min max scales the values in that range 
 - recursively "windows" entities in that range
 - outputs a turtle file of the entities related to their windows and which entities their associated values are lesser than
