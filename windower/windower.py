@@ -16,7 +16,6 @@ Arguments:
     --D            Distribution for random values: "uniform" or "normal" (default: uniform)
     --low          Lower bound for distribution (default: 0.0)
     --high         Upper bound for distribution (default: 10.0)
-    --sort_input   Sort input values before normalization (default: True)
     --verbose      Print details of the pipeline (default: True)
     --save         Optional path to save the RDF graph (Turtle format)
     --precision    Optional precision step size (e.g., 1e-4).
@@ -68,11 +67,8 @@ def print_windows(node: Window, ndigits=3):
     if node.right:
         print_windows(node.right, ndigits)
 
-# ... keep build_kg, run_windower_pipeline, CLI unchanged ...
-
-
 # ========= RDF Export =========
-def build_kg(root: Window, lt_map: Dict[str, List[str]], norm_pairs: List[Tuple[str, float]]) -> Graph:
+def build_kg(root: Window, norm_pairs: List[Tuple[str, float]]) -> Graph:
     g = Graph()
     g.bind("ex", EX)
 
@@ -93,14 +89,14 @@ def build_kg(root: Window, lt_map: Dict[str, List[str]], norm_pairs: List[Tuple[
 
     add_window_triples(root)
 
-    # Add lessThan relations
-    for e1, smaller_than_list in lt_map.items():
-        for e2 in smaller_than_list:
-            g.add((EX[e1], EX.lessThan, EX[e2]))
+    # Sort entities by value once
+    sorted_pairs = sorted(norm_pairs, key=lambda x: x[1])
 
-    # Add numeric values (normalized)
-    for e, v in norm_pairs:
-        g.add((EX[e], EX.hasValue, Literal(v, datatype=XSD.float)))
+    # Add values + lessThan edges in one pass
+    for i, (e1, v1) in enumerate(sorted_pairs):
+        g.add((EX[e1], EX.hasValue, Literal(v1, datatype=XSD.float)))
+        for e2, v2 in sorted_pairs[i+1:]:
+            g.add((EX[e1], EX.lessThan, EX[e2]))
 
     return g
 
@@ -113,9 +109,6 @@ def run_windower_pipeline(
 ):
     pairs = list(entities_with_values.items())
 
-    if sort_input:
-        pairs = sorted(pairs, key=lambda x: x[1])
-
     norm_pairs = tools.minmax_scale_pairs(pairs)
     root = windower(norm_pairs, depth)
 
@@ -125,15 +118,8 @@ def run_windower_pipeline(
         print("\nWindows:")
         print_windows(root)
 
-        print("\nLess-than relationships:")
-        lt_map = tools.compute_less_than(norm_pairs)
-        for e, smaller_than in lt_map.items():
-            print(f"{e} < {smaller_than}")
-    else:
-        lt_map = tools.compute_less_than(norm_pairs)
-
     # Build RDF graph
-    g = build_kg(root, lt_map, norm_pairs)
+    g = build_kg(root, norm_pairs)
     return norm_pairs, root, g
 
 # ========= Main =========
@@ -150,9 +136,6 @@ if __name__ == "__main__":
                         help="Lower bound for distribution.")
     parser.add_argument("--high", type=float, default=10.0,
                         help="Upper bound for distribution.")
-    parser.add_argument("--sort_input", type=lambda x: (str(x).lower() == "true"),
-                        default=True,
-                        help="Sort input before normalization (True/False).")
     parser.add_argument("--verbose", type=lambda x: (str(x).lower() == "true"),
                         default=True,
                         help="Print details (True/False).")
@@ -176,7 +159,6 @@ if __name__ == "__main__":
     norm_pairs, root, g = run_windower_pipeline(
         entities_with_rand_nums,
         depth=args.depth,
-        sort_input=args.sort_input,
         verbose=args.verbose,
     )
 

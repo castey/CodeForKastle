@@ -5,7 +5,6 @@ def gen_entity_array(n: int):
     """Generate an array of n entities named E0, E1, ... En-1."""
     return [f"E{i}" for i in range(n)]
 
-
 def random_from_distribution(dist: str, low: float, high: float, precision: Optional[float] = None) -> float:
     """Return a random float in [low, high] given a distribution.
 
