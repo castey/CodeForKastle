@@ -1,8 +1,40 @@
+"""
+Windower: Hierarchical Windowing and RDF Knowledge Graph Export
+
+This module builds a hierarchical "window" tree over a set of entities
+with numeric values. Entities are first normalized (min–max scaling),
+then recursively split into subwindows to a given depth. The structure,
+entity relationships, and normalized values are exported as an RDF graph.
+
+Usage (command line):
+    python windower.py --n_entities 10 --depth 3 --D uniform --low 0 --high 10 \
+        --sort_input True --verbose True --save output.ttl
+
+Arguments:
+    --n_entities   Number of entities to generate (default: 10)
+    --depth        Depth of the window tree (default: 4)
+    --D            Distribution for random values: "uniform" or "normal" (default: uniform)
+    --low          Lower bound for distribution (default: 0.0)
+    --high         Upper bound for distribution (default: 10.0)
+    --sort_input   Sort input values before normalization (default: True)
+    --verbose      Print details of the pipeline (default: True)
+    --save         Optional path to save the RDF graph (Turtle format)
+    --precision    Optional precision step size (e.g., 1e-4).
+
+Example:
+    python windower.py --n_entities 5 --depth 2 --D normal --low 0 --high 100 \
+        --save mygraph.ttl
+
+This will generate 5 entities with random values from a normal distribution
+between 0 and 100, build a depth-2 window tree, print details, and save the
+RDF graph to "mygraph.ttl".
+"""
+
 import argparse
-import numpy as np
 from typing import Sequence, Optional, Tuple, List, Dict
-import tools
 from rdflib import Graph, Namespace, RDF, URIRef, Literal, XSD
+
+import tools
 
 EX = Namespace("http://example.org/")
 
@@ -10,33 +42,18 @@ class Window:
     def __init__(self, elements: Sequence[Tuple[str, float]], n: int, path="root"):
         self.elements: List[Tuple[str, float]] = list(elements)
         self.n = n
-        self.path = path  # unique identifier (root, root->L, etc.)
+        self.path = path
         self.left: Optional["Window"] = None
         self.right: Optional["Window"] = None
 
     def __repr__(self):
         return f"Window(path={self.path}, n={self.n}, size={len(self.elements)})"
 
-# ========= Helpers =========
-def minmax_scale_pairs(pairs: Sequence[Tuple[str, float]]):
-    if not pairs:
-        return []
-    values = np.array([v for _, v in pairs], dtype=float)
-    mn, mx = values.min(), values.max()
-    if mn == mx:
-        return [(e, 0.0) for e, _ in pairs]
-    normed = (values - mn) / (mx - mn)
-    return [(e, float(v)) for (e, _), v in zip(pairs, normed)]
-
-def split_pairs(pairs: Sequence[Tuple[str, float]]):
-    mid = len(pairs) // 2
-    return pairs[:mid], pairs[mid:]
-
 def windower(pairs: Sequence[Tuple[str, float]], n: int = 1, path="root") -> Window:
     node = Window(pairs, n, path=path)
     if n <= 1 or len(pairs) <= 1:
         return node
-    left, right = split_pairs(pairs)
+    left, right = tools.split_pairs(pairs)
     node.left = windower(left, n - 1, path + "->L")
     node.right = windower(right, n - 1, path + "->R")
     return node
@@ -51,13 +68,8 @@ def print_windows(node: Window, ndigits=3):
     if node.right:
         print_windows(node.right, ndigits)
 
-def compute_less_than(pairs: Sequence[Tuple[str, float]]):
-    result = {e: [] for e, _ in pairs}
-    for e1, v1 in pairs:
-        for e2, v2 in pairs:
-            if v1 < v2:
-                result[e1].append(e2)
-    return result
+# ... keep build_kg, run_windower_pipeline, CLI unchanged ...
+
 
 # ========= RDF Export =========
 def build_kg(root: Window, lt_map: Dict[str, List[str]], norm_pairs: List[Tuple[str, float]]) -> Graph:
@@ -104,7 +116,7 @@ def run_windower_pipeline(
     if sort_input:
         pairs = sorted(pairs, key=lambda x: x[1])
 
-    norm_pairs = minmax_scale_pairs(pairs)
+    norm_pairs = tools.minmax_scale_pairs(pairs)
     root = windower(norm_pairs, depth)
 
     if verbose:
@@ -114,11 +126,11 @@ def run_windower_pipeline(
         print_windows(root)
 
         print("\nLess-than relationships:")
-        lt_map = compute_less_than(norm_pairs)
+        lt_map = tools.compute_less_than(norm_pairs)
         for e, smaller_than in lt_map.items():
             print(f"{e} < {smaller_than}")
     else:
-        lt_map = compute_less_than(norm_pairs)
+        lt_map = tools.compute_less_than(norm_pairs)
 
     # Build RDF graph
     g = build_kg(root, lt_map, norm_pairs)
@@ -146,6 +158,9 @@ if __name__ == "__main__":
                         help="Print details (True/False).")
     parser.add_argument("--save", type=str, default=None,
                         help="Optional path to save KG as Turtle file.")
+    parser.add_argument("--precision", type=float, default=None,
+                    help="Optional precision step size (e.g., 1e-4).")
+
     args = parser.parse_args()
 
     # generate entity array
@@ -153,7 +168,7 @@ if __name__ == "__main__":
 
     # assign random values using chosen distribution and range
     entities_with_rand_nums = {
-        entity: tools.random_from_distribution(args.D, args.low, args.high)
+        entity: tools.random_from_distribution(args.D, args.low, args.high, args.precision)
         for entity in entity_array
     }
 
