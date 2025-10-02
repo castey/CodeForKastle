@@ -80,7 +80,6 @@ def download_pdf(metadata: dict) -> bool:
         print(f"Could not download PDF. Status: {resp.status_code}")
         return False
 
-
 # Example usage:
 if __name__ == "__main__":
     doi = "10.1177/0954008315588983"
