@@ -31,7 +31,6 @@ RDF graph to "mygraph.ttl".
 
 import argparse
 from typing import Sequence, Optional, Tuple, List, Dict
-from rdflib import Graph, Namespace, RDF, URIRef, Literal, XSD
 
 import tools
 
