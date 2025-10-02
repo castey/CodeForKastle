@@ -68,37 +68,40 @@ def print_windows(node: Window, ndigits=3):
         print_windows(node.right, ndigits)
 
 # ========= RDF Export =========
-def build_kg(root: Window, norm_pairs: List[Tuple[str, float]]) -> Graph:
-    g = Graph()
-    g.bind("ex", EX)
+def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str):
+    """
+    Write RDF triples directly to an N-Triples file instead of building
+    an in-memory rdflib.Graph. This scales better for large runs.
+    """
 
-    # Recursively add windows + memberships
-    def add_window_triples(node: Window):
-        window_uri = EX[f"Window_{node.path.replace('->','_')}"]
-        g.add((window_uri, RDF.type, EX.Window))
+    with open(outfile, "w") as f:
+        # --------- Write window triples ---------
+        def add_window_triples(node: Window):
+            window_uri = f"<http://example.org/Window_{node.path.replace('->','_')}>"
+            f.write(f"{window_uri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Window> .\n")
 
-        for e, v in node.elements:
-            entity_uri = EX[e]
-            g.add((entity_uri, RDF.type, EX.Entity))
-            g.add((entity_uri, EX.inWindow, window_uri))
+            for e, v in node.elements:
+                entity_uri = f"<http://example.org/{e}>"
+                f.write(f"{entity_uri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Entity> .\n")
+                f.write(f"{entity_uri} <http://example.org/inWindow> {window_uri} .\n")
 
-        if node.left:
-            add_window_triples(node.left)
-        if node.right:
-            add_window_triples(node.right)
+            if node.left:
+                add_window_triples(node.left)
+            if node.right:
+                add_window_triples(node.right)
 
-    add_window_triples(root)
+        add_window_triples(root)
 
-    # Sort entities by value once
-    sorted_pairs = sorted(norm_pairs, key=lambda x: x[1])
+        # --------- Write values + lessThan triples ---------
+        sorted_pairs = sorted(norm_pairs, key=lambda x: x[1])
 
-    # Add values + lessThan edges in one pass
-    for i, (e1, v1) in enumerate(sorted_pairs):
-        g.add((EX[e1], EX.hasValue, Literal(v1, datatype=XSD.float)))
-        for e2, v2 in sorted_pairs[i+1:]:
-            g.add((EX[e1], EX.lessThan, EX[e2]))
+        for i, (e1, v1) in enumerate(sorted_pairs):
+            subj = f"<http://example.org/{e1}>"
+            f.write(f"{subj} <http://example.org/hasValue> \"{v1}\"^^<http://www.w3.org/2001/XMLSchema#float> .\n")
 
-    return g
+            for e2, v2 in sorted_pairs[i+1:]:
+                obj = f"<http://example.org/{e2}>"
+                f.write(f"{subj} <http://example.org/lessThan> {obj} .\n")
 
 # ========= Pipeline =========
 def run_windower_pipeline(
@@ -119,8 +122,7 @@ def run_windower_pipeline(
         print_windows(root)
 
     # Build RDF graph
-    g = build_kg(root, norm_pairs)
-    return norm_pairs, root, g
+    build_kg(root, norm_pairs)
 
 # ========= Main =========
 if __name__ == "__main__":
@@ -156,7 +158,7 @@ if __name__ == "__main__":
     }
 
     # run pipeline
-    norm_pairs, root, g = run_windower_pipeline(
+    run_windower_pipeline(
         entities_with_rand_nums,
         depth=args.depth,
         verbose=args.verbose,
