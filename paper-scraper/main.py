@@ -18,8 +18,13 @@ Will likely be able to support:
 - Wiley (10.1002)
 - MDPI (10.3390)
 
+UM IDK???:
+- SAGE 
+    1 request every 6 seconds - Monday to Friday between Midnight and Noon in the "America/Los_Angeles" timezone;
+    1 request every 2 seconds - Monday to Friday between Noon and Midnight in the "America/Los_Angeles" timezone, and all day Saturday and Sunday.
+
 Will likely not be able to support:
-- SAGE (10.1177)
+- SAGE (10.1177) ()
 - World Scientific (10.1142)
 - Cambridge / Materials Research Society (10.1557)
 - Taylor & Francis (10.1080)

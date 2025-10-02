@@ -25,5 +25,5 @@ for D in parsed_DOIs:
 
 unique_prefixes = list(set(cleaned_prefixes_final))
 
-#print(unique_prefixes)
+print(unique_prefixes)
 
