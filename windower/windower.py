@@ -71,7 +71,7 @@ def print_windows(node: Window, ndigits=3):
 # ========= RDF Export =========
 def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt_mode: Literal["sequential", "pairwise"]):
     """
-    Write RDF triples directly to an N-Triples file.
+    Write triples to a TSV file usable by PyKEEN.
     Excludes hasValue datatype triples for embedding use.
     """
     
@@ -80,13 +80,12 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
     with open(outfile, "w") as f, open(vals_file, "w") as vf:
         # --------- Write window triples ---------
         def add_window_triples(node: Window):
-            window_uri = f"<http://example.org/Window_{node.path.replace('->','_')}>"
-            f.write(f"{window_uri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Window> .\n")
+            window_label = f"Window_{node.path.replace('->','_')}"
+            f.write(f"{window_label}\ttype\tWindow\n")
 
             for e, v in node.elements:
-                entity_uri = f"<http://example.org/{e}>"
-                f.write(f"{entity_uri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Entity> .\n")
-                f.write(f"{entity_uri} <http://example.org/inWindow> {window_uri} .\n")
+                f.write(f"{e}\ttype\tEntity\n")
+                f.write(f"{e}\tinWindow\t{window_label}\n")
 
             if node.left:
                 add_window_triples(node.left)
@@ -100,18 +99,14 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
 
         if lt_mode == "pairwise":
             for i, (e1, _) in enumerate(sorted_pairs):
-                subj = f"<http://example.org/{e1}>"
                 for e2, _ in sorted_pairs[i+1:]:
-                    obj = f"<http://example.org/{e2}>"
-                    f.write(f"{subj} <http://example.org/lessThan> {obj} .\n")
+                    f.write(f"{e1}\tlessThan\t{e2}\n")
 
         elif lt_mode == "sequential":
             for (e1, _), (e2, _) in zip(sorted_pairs, sorted_pairs[1:]):
-                subj = f"<http://example.org/{e1}>"
-                obj = f"<http://example.org/{e2}>"
-                f.write(f"{subj} <http://example.org/lessThan> {obj} .\n")
+                f.write(f"{e1}\tlessThan\t{e2}\n")
                 
-        # log values with entity labels in val.txt file
+        # --------- Log values with entity labels ---------
         for e, v in sorted_pairs:
             vf.write(f"{e}\t{v}\n")
 
