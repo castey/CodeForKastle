@@ -6,3 +6,10 @@ __pycache__/
 misc/
 papers/
 turtles/
+env311/
+.vscode/
+logs/
+embedding_plots/
+junkdrawer/
+KGs/
+KGsOnStandby/

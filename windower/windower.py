@@ -8,8 +8,6 @@ entity relationships, and normalized values are exported directly to an
 RDF file in N-Triples format.
 
 Usage (command line):
-    python windower.py --n_entities 10 --depth 3 --D uniform --low 0 --high 10 \
-        --sort_input True --verbose True --outfile output.nt
 
 Arguments:
     --n_entities   Number of entities to generate (default: 10)
@@ -19,24 +17,17 @@ Arguments:
     --high         Upper bound for distribution (default: 10.0)
     --verbose      Print details of the pipeline (default: True)
     --outfile      Path to save the RDF graph (N-Triples format, .nt recommended)
-    --precision    Optional precision step size (e.g., 1e-4).
-
-Example:
-    python windower.py --n_entities 5 --depth 2 --D normal --low 0 --high 100 \
-        --outfile mygraph.nt
+    --lt_mode      Less than relationships mode (sequential, pairwise)
+    --precision    Optional precision step size (e.g., 4 for 4 decimal places).
 
 This will generate 5 entities with random values from a normal distribution
 between 0 and 100, build a depth-2 window tree, print details, and save the
 RDF graph to "mygraph.nt".
 """
 
-
 import argparse
 from typing import Sequence, Optional, Tuple, List, Literal
-from rdflib import Namespace
-import tools
-
-EX = Namespace("http://example.org/")
+import tools, random, os
 
 class Window:
     def __init__(self, elements: Sequence[Tuple[str, float]], n: int, path="root"):
@@ -74,8 +65,11 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
     Write triples to a TSV file usable by PyKEEN.
     Excludes hasValue datatype triples for embedding use.
     """
+    output_directory = "KGs"
+    os.makedirs(output_directory, exist_ok=True)
     
-    vals_file = f"{outfile}.val.txt"
+    outfile = os.path.join(output_directory, outfile)
+    vals_file = f"{outfile}.val"
 
     with open(outfile, "w") as f, open(vals_file, "w") as vf:
         # --------- Write window triples ---------
@@ -96,7 +90,8 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
 
         # --------- Write lessThan edges only ---------
         sorted_pairs = sorted(norm_pairs, key=lambda x: x[1])
-
+        #print(sorted_pairs)
+        
         if lt_mode == "pairwise":
             for i, (e1, _) in enumerate(sorted_pairs):
                 for e2, _ in sorted_pairs[i+1:]:
@@ -105,7 +100,21 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
         elif lt_mode == "sequential":
             for (e1, _), (e2, _) in zip(sorted_pairs, sorted_pairs[1:]):
                 f.write(f"{e1}\tlessThan\t{e2}\n")
-                
+    
+        elif lt_mode == "rand5":
+            for i, (e1, v1) in enumerate(sorted_pairs):
+                # get all entities after e1 in the sorted list (greater ones)
+                remaining = sorted_pairs[i+1:]
+                if not remaining:
+                    continue  # nothing greater than e1
+
+                # choose up to 5 randomly from remaining
+                num_to_pick = min(5, len(remaining))
+                random_5 = random.sample(remaining, num_to_pick)
+
+                for e2, _ in random_5:
+                    f.write(f"{e1}\tlessThan\t{e2}\n")
+    
         # --------- Log values with entity labels ---------
         for e, v in sorted_pairs:
             vf.write(f"{e}\t{v}\n")
@@ -121,6 +130,7 @@ def run_windower_pipeline(
     pairs = list(entities_with_values.items())
 
     norm_pairs = tools.minmax_scale_pairs(pairs)
+    
     root = windower(norm_pairs, depth)
 
     if verbose:
@@ -131,7 +141,6 @@ def run_windower_pipeline(
 
     # Build RDF graph
     build_kg(root=root, norm_pairs=norm_pairs, outfile=outfile, lt_mode=lt_mode)
-
 
 # ========= Main =========
 if __name__ == "__main__":
@@ -151,16 +160,16 @@ if __name__ == "__main__":
                         default=True,
                         choices=[True, False],
                         help="Print details (True/False).")
-    parser.add_argument("--precision", type=float, default=None,
-                        help="Optional precision step size (e.g., 1e-4).")
+    parser.add_argument("--precision", type=int, default=None,
+                        help="Optional precision step size (e.g., 4 for 4 decimal places after).")
     parser.add_argument("--lt_mode", type=str, required=True,
-                        choices=["pairwise", "sequential"],
+                        choices=["pairwise", "sequential", "rand5"],
                         help="Save less-than edges as pairwise (complete) or sequential (chain).")
-    parser.add_argument("--outfile", type=str, required=True,
+    parser.add_argument("--outfile", type=str, required=False,
                         help="Path to save the RDF graph (N-Triples format, .nt recommended).")
 
     args = parser.parse_args()
-
+    
     # generate entity array
     entity_array = tools.gen_entity_array(args.n_entities)
 
@@ -169,12 +178,15 @@ if __name__ == "__main__":
         entity: tools.random_from_distribution(args.D, args.low, args.high, args.precision)
         for entity in entity_array
     }
-
+    if not args.outfile:
+        outfile = f"E-{args.n_entities}_{args.D}_d-{args.depth}_p-{args.precision}_{args.lt_mode}.tsv"
+    else: 
+        outfile = args.outfile
     # run pipeline
     run_windower_pipeline(
         entities_with_rand_nums,
         depth=args.depth,
         lt_mode=args.lt_mode,
         verbose=args.verbose,
-        outfile=args.outfile
+        outfile=outfile
     )
