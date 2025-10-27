@@ -10,11 +10,13 @@ from pykeen.utils import set_random_seed
 
 # matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+# import matplotlib.colors as mcolors
 
 # others
 import pandas as pd
 import random, torch, os
+import numpy as np
 
 # seed random and torch with predefined fixed seed
 seed = 42
@@ -66,7 +68,7 @@ def embed_and_plot(model, seed, training_epochs, dimensionality):
         print(f"Training complete for {base_name}!")
 
         # dimensionality reduction and plotting
-        reduce_and_plot(result=result, val_file=val_file, basename=f"{base_name}_{model}", only_entities=True)
+        reduce_and_plot(result=result, val_file=val_file, basename=f"{base_name}_{model}_DE-{dimensionality}", only_entities=True)
 
 # --- classify node type ---
 def classify_node(name):
@@ -85,68 +87,138 @@ def compute_reductions(entity_emb):
     reduced_tSNE = TSNE(n_components=2, random_state=seed, perplexity=30, max_iter=1000).fit_transform(entity_emb)
     reduced_UMAP = umap.UMAP(n_components=2, random_state=seed).fit_transform(entity_emb)
     #reduced_PaCMAP = PaCMAP(random_state=seed, n_neighbors=5).fit_transform(entity_emb)
-    return { "tSNE": reduced_tSNE, "UMAP": reduced_UMAP } #"PaCMAP": reduced_PaCMAP}
+    return { "tSNE": reduced_tSNE, "UMAP": reduced_UMAP } #, "PaCMAP": reduced_PaCMAP }
 
 # --- plotting helper ---
 def plot_embedding(entity_df, reduced, title="Embedding Projection", outpath=None):
     """
-    Plot 2D embedding with color gradient from dodgerblue → red
-    based on 'initial_values'.
+    Generate two 2D embedding plots:
+    1. Gradient version (dodgerblue → red) based on 'initial_values'.
+    2. Categorical version using 8 discrete cool→warm color bins.
+    
+    Both include the numeric initialization values printed inside the points:
+        - white text for above-mean values
+        - black text for below-mean values
+    
+    Each saved as an SVG for infinite zoom clarity.
     """
     entity_df = entity_df.copy()
     entity_df[["x", "y"]] = reduced
 
-    # Define custom gradient: dodgerblue → red (go dodgers!)
-    cmap = LinearSegmentedColormap.from_list("blue_red", ["dodgerblue", "red"])
-    
-    plt.figure(figsize=(10, 8))
-    ax = plt.gca()
+    if "initial_values" not in entity_df.columns:
+        print("[WARN] No 'initial_values' column found — skipping color encoding.")
+        return
 
-    if "initial_values" in entity_df.columns:
-        vals = entity_df["initial_values"].astype(float)
-        
-        sc = ax.scatter(
-            entity_df.x,
-            entity_df.y,
-            c=vals,
-            cmap=cmap,
-            s=60,
-            alpha=0.9,
-            edgecolor="k",
-            linewidths=0.4,
-            zorder=2
+    vals = entity_df["initial_values"].astype(float)
+    mean_val = vals.mean()
+    plt.ioff()  # no GUI window
+
+    # ==========================================================
+    # 1. GRADIENT PLOT (continuous dodgerblue → red)
+    # ==========================================================
+    cmap_grad = LinearSegmentedColormap.from_list("blue_red", ["dodgerblue", "red"])
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    sc = ax.scatter(
+        entity_df.x,
+        entity_df.y,
+        c=vals,
+        cmap=cmap_grad,
+        s=60,
+        alpha=0.9,
+        edgecolor="k",
+        linewidths=0.4,
+        zorder=2,
+    )
+
+    # Annotate values (white if above mean, black if below)
+    for _, row in entity_df.iterrows():
+        val_str = f"{row.initial_values:.3f}"
+        ax.text(
+            row.x, row.y, val_str,
+            ha="center", va="center",
+            fontsize=2.5,
+            fontweight="medium",
+            color="white" if row.initial_values > mean_val else "black",
+            zorder=3,
         )
-        
-        cbar = plt.colorbar(sc)
-        cbar.set_label("Initialization Value", fontsize=12)
-        
-        # annotate each point with its value (centered)
-        for _, row in entity_df.iterrows():
-            val_str = f"{row.initial_values:.3f}"
-            ax.text(
-                row.x, row.y, val_str,
-                ha="center", 
-                va="center",
-                fontsize=2.0, 
-                fontweight="medium",
-                color="white" if row.initial_values > vals.mean() else "black",
-                zorder=3,
-            )
-    else:
-        ax.scatter(entity_df.x, entity_df.y, s=12, alpha=0.7, color="gray", edgecolor="k", linewidths=0.2)
 
-    ax.set_title(title, fontsize=14)
+    cbar = plt.colorbar(sc, ax=ax)
+    cbar.set_label("Initialization Value", fontsize=12)
+
+    ax.set_title(f"{title} — Gradient", fontsize=14)
     ax.set_xlabel("Component 1", fontsize=12)
     ax.set_ylabel("Component 2", fontsize=12)
     plt.tight_layout()
 
     if outpath:
-        svg_path = outpath.replace(".png", ".svg")
+        svg_path = outpath.replace(".png", "_gradient.svg")
         plt.savefig(svg_path, format="svg", bbox_inches="tight")
-        print(f"[Saved SVG] {svg_path}")
+        print(f"[Saved Gradient SVG] {svg_path}")
 
-    plt.close()
+    plt.close(fig)
 
+    # ==========================================================
+    # 2. CATEGORICAL PLOT (8 color bins)
+    # ==========================================================
+    label_colors = [
+        "#13315C",  # dark navy
+        "#155E75",  # deep teal
+        "#208B82",  # sea green
+        "#34A853",  # muted green
+        "#B7950B",  # gold tone
+        "#DAA520",  # goldenrod
+        "#E6B422",  # amber
+        "#FEE191",  # pastel yellow
+    ]
+
+    bins = np.linspace(vals.min(), vals.max(), 9)
+    bin_indices = np.digitize(vals, bins) - 1
+    bin_indices = np.clip(bin_indices, 0, 7)
+
+    cmap_cat = ListedColormap(label_colors)
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    sc = ax.scatter(
+        entity_df.x,
+        entity_df.y,
+        c=bin_indices,
+        cmap=cmap_cat,
+        s=60,
+        alpha=0.9,
+        edgecolor="k",
+        linewidths=0.4,
+        zorder=2,
+    )
+
+    # Annotate values again
+    for _, row in entity_df.iterrows():
+        val_str = f"{row.initial_values:.3f}"
+        ax.text(
+            row.x, row.y, val_str,
+            ha="center", va="center",
+            fontsize=2.5,
+            fontweight="medium",
+            color="white" if row.initial_values > mean_val else "black",
+            zorder=3,
+        )
+
+    cbar = plt.colorbar(sc, ax=ax, ticks=np.arange(0.5, 8.5, 1))
+    cbar.ax.set_yticklabels([f"Bin {i+1}" for i in range(8)])
+    cbar.set_label("Initialization Value (Categorical)", fontsize=12)
+
+    ax.set_title(f"{title} — Categorical Bins", fontsize=14)
+    ax.set_xlabel("Component 1", fontsize=12)
+    ax.set_ylabel("Component 2", fontsize=12)
+    plt.tight_layout()
+
+    if outpath:
+        svg_path = outpath.replace(".png", "_categories.svg")
+        plt.savefig(svg_path, format="svg", bbox_inches="tight")
+        print(f"[Saved Category SVG] {svg_path}")
+
+    plt.close(fig)
+        
 # --- main pipeline ---
 def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, only_entities=True):
     """
@@ -198,8 +270,20 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
         print(entity_df["initial_values"].sample(10, random_state=42))
 
         # Show missing (NaN) values, if any
-        missing = entity_df["initial_values"].isna().sum()
-        print(f"\n[INFO] Missing initialization values: {missing}")
+        # Show missing (NaN) values, if any
+        missing_mask = entity_df["initial_values"].isna()
+        missing_count = missing_mask.sum()
+
+        print(f"\n[INFO] Missing initialization values: {missing_count}")
+
+        if missing_count > 0:
+            missing_entities = entity_df.index[missing_mask].tolist()
+            print("[DEBUG] Entities missing initialization values:")
+            for e in missing_entities:
+                print(f"  - {e}")
+                entity_df = entity_df.dropna(subset=["initial_values"])
+
+
 
         # Optional full table if you want to inspect entity–value pairs
         # print(entity_df[["initial_values"]])
@@ -226,4 +310,5 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
 # TransE dimensionality default = 50 
 # TransR dimensionality default = 50 
 # TransD dimensionality default = 50 
-embed_and_plot("MuRE", seed, 100, dimensionality=None)
+
+embed_and_plot(model="MuRE", seed=seed, training_epochs=100, dimensionality=200)

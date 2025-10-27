@@ -18,3 +18,8 @@ Color code based on windows
 Color gradient of values for all PCA, Tsne, UMAP
 
 Look into values inside datapoints on plot
+
+# 10/28 notes
+## pre-meeting notes:
+- lobe clusters are related to the rand5_lt relationships
+- dimensionality of MuRE seems to have a negligible effect

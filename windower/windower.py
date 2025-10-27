@@ -16,13 +16,13 @@ Arguments:
     --low          Lower bound for distribution (default: 0.0)
     --high         Upper bound for distribution (default: 10.0)
     --verbose      Print details of the pipeline (default: True)
-    --outfile      Path to save the RDF graph (N-Triples format, .nt recommended)
+    --outfile      Path to save the RDF graph ([optional] N-Triples format, .nt recommended
     --lt_mode      Less than relationships mode (sequential, pairwise)
     --precision    Optional precision step size (e.g., 4 for 4 decimal places).
+    --reverse     Reverses the sort order for the calculation of lt (turns lt relationships into gt)
 
-This will generate 5 entities with random values from a normal distribution
-between 0 and 100, build a depth-2 window tree, print details, and save the
-RDF graph to "mygraph.nt".
+Example:
+    python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --reverse false
 """
 
 import argparse
@@ -60,7 +60,7 @@ def print_windows(node: Window, ndigits=3):
         print_windows(node.right, ndigits)
 
 # ========= RDF Export =========
-def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt_mode: Literal["sequential", "pairwise"]):
+def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt_mode: Literal["sequential", "pairwise"], reverse):
     """
     Write triples to a TSV file usable by PyKEEN.
     Excludes hasValue datatype triples for embedding use.
@@ -89,8 +89,8 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
         add_window_triples(root)
 
         # --------- Write lessThan edges only ---------
-        sorted_pairs = sorted(norm_pairs, key=lambda x: x[1])
-        #print(sorted_pairs)
+        sorted_pairs = sorted(norm_pairs, key=lambda x: x[1], reverse=reverse)
+        print(sorted_pairs)
         
         if lt_mode == "pairwise":
             for i, (e1, _) in enumerate(sorted_pairs):
@@ -125,7 +125,8 @@ def run_windower_pipeline(
     depth: int,
     lt_mode: str,
     verbose: bool,
-    outfile: str
+    outfile: str,
+    reverse: bool
 ):
     pairs = list(entities_with_values.items())
 
@@ -140,7 +141,7 @@ def run_windower_pipeline(
         print_windows(root)
 
     # Build RDF graph
-    build_kg(root=root, norm_pairs=norm_pairs, outfile=outfile, lt_mode=lt_mode)
+    build_kg(root=root, norm_pairs=norm_pairs, outfile=outfile, lt_mode=lt_mode, reverse=reverse)
 
 # ========= Main =========
 if __name__ == "__main__":
@@ -157,7 +158,7 @@ if __name__ == "__main__":
     parser.add_argument("--high", type=float, default=10.0,
                         help="Upper bound for distribution (must be > low).")
     parser.add_argument("--verbose", type=lambda x: (str(x).lower() == "true"),
-                        default=True,
+                        default=False,
                         choices=[True, False],
                         help="Print details (True/False).")
     parser.add_argument("--precision", type=int, default=None,
@@ -167,6 +168,9 @@ if __name__ == "__main__":
                         help="Save less-than edges as pairwise (complete) or sequential (chain).")
     parser.add_argument("--outfile", type=str, required=False,
                         help="Path to save the RDF graph (N-Triples format, .nt recommended).")
+    
+    parser.add_argument("--reverse", action="store_true",
+        help="Reverse order: greater-than instead of less-than")
 
     args = parser.parse_args()
     
@@ -188,5 +192,6 @@ if __name__ == "__main__":
         depth=args.depth,
         lt_mode=args.lt_mode,
         verbose=args.verbose,
-        outfile=outfile
+        outfile=outfile, 
+        reverse=args.reverse
     )
