@@ -2,6 +2,7 @@
 from sklearn.manifold import TSNE
 import umap.umap_ as umap
 from pacmap import PaCMAP # try to get this work at some point (also might be easier to use this for PCA)
+from sklearn.decomposition import PCA
 
 # pykeen imports
 from pykeen.pipeline import pipeline
@@ -86,8 +87,9 @@ def compute_reductions(entity_emb):
     """Return dictionary of DR results for t-SNE, UMAP, PaCMAP."""
     reduced_tSNE = TSNE(n_components=2, random_state=seed, perplexity=30, max_iter=1000).fit_transform(entity_emb)
     reduced_UMAP = umap.UMAP(n_components=2, random_state=seed).fit_transform(entity_emb)
+    reduced_PCA = PCA(n_components=2, random_state=seed).fit_transform(entity_emb)
     #reduced_PaCMAP = PaCMAP(random_state=seed, n_neighbors=5).fit_transform(entity_emb)
-    return { "tSNE": reduced_tSNE, "UMAP": reduced_UMAP } #, "PaCMAP": reduced_PaCMAP }
+    return { "PCA": reduced_PCA, "tSNE": reduced_tSNE, "UMAP": reduced_UMAP } #, "PaCMAP": reduced_PaCMAP }
 
 # --- plotting helper ---
 def plot_embedding(entity_df, reduced, title="Embedding Projection", outpath=None):
@@ -282,8 +284,6 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
             for e in missing_entities:
                 print(f"  - {e}")
                 entity_df = entity_df.dropna(subset=["initial_values"])
-
-
 
         # Optional full table if you want to inspect entity–value pairs
         # print(entity_df[["initial_values"]])
