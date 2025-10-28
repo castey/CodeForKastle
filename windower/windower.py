@@ -22,7 +22,7 @@ Arguments:
     --reverse     Reverses the sort order for the calculation of lt (turns lt relationships into gt)
 
 Example:
-    python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --reverse false
+    python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4
 """
 
 import argparse
