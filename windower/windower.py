@@ -89,15 +89,28 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
         add_window_triples(root)
 
         # --------- Write lessThan edges only ---------
-        sorted_pairs = sorted(norm_pairs, key=lambda x: x[1], reverse=reverse)
+        sorted_pairs = sorted(norm_pairs, key=lambda x: x[1], reverse=reverse) # reverse flips the order such that lesser than relationships are actually greater than
         print(sorted_pairs)
         
-        if lt_mode == "pairwise":
+        if lt_mode == "pairwise": 
+            #pairwise all
             for i, (e1, _) in enumerate(sorted_pairs):
                 for e2, _ in sorted_pairs[i+1:]:
                     f.write(f"{e1}\tlessThan\t{e2}\n")
-
-        elif lt_mode == "sequential":
+                    
+        elif lt_mode == "pairwise5":
+            for i, (e1, _) in enumerate(sorted_pairs):
+                # look ahead up to 5 items, but don't exceed the list length
+                for (e2, _) in sorted_pairs[i+1:i+6]:
+                    f.write(f"{e1}\tlessThan\t{e2}\n")
+                    
+        elif lt_mode == "pairwise10":
+            for i, (e1, _) in enumerate(sorted_pairs):
+                # look ahead up to 10 items, but don't exceed the list length
+                for (e2, _) in sorted_pairs[i+1:i+11]:
+                    f.write(f"{e1}\tlessThan\t{e2}\n")
+                    
+        elif lt_mode == "sequential": # sequential for 1
             for (e1, _), (e2, _) in zip(sorted_pairs, sorted_pairs[1:]):
                 f.write(f"{e1}\tlessThan\t{e2}\n")
     
@@ -164,13 +177,16 @@ if __name__ == "__main__":
     parser.add_argument("--precision", type=int, default=None,
                         help="Optional precision step size (e.g., 4 for 4 decimal places after).")
     parser.add_argument("--lt_mode", type=str, required=True,
-                        choices=["pairwise", "sequential", "rand5"],
+                        choices=["pairwise", "sequential", "rand5", "pairwise5", "pairwise10"],
                         help="Save less-than edges as pairwise (complete) or sequential (chain).")
     parser.add_argument("--outfile", type=str, required=False,
                         help="Path to save the RDF graph (N-Triples format, .nt recommended).")
     
     parser.add_argument("--reverse", action="store_true",
         help="Reverse order: greater-than instead of less-than")
+    
+    parser.add_argument("--mean_e3", action="store_true",
+        help="for every entity e1 and e2, generates a perturbated mean of e1, e2 for e3")
 
     args = parser.parse_args()
     
@@ -178,10 +194,20 @@ if __name__ == "__main__":
     entity_array = tools.gen_entity_array(args.n_entities)
 
     # assign random values using chosen distribution and range
-    entities_with_rand_nums = {
-        entity: tools.random_from_distribution(args.D, args.low, args.high, args.precision)
-        for entity in entity_array
-    }
+    
+    # initialize dict
+    entities_with_rand_nums = {}
+    
+    for entity in entity_array:
+        rand_val = tools.random_from_distribution(
+            args.D,
+            args.low,
+            args.high,
+            args.precision
+        )
+        
+        entities_with_rand_nums[entity] = rand_val
+        
     if not args.outfile:
         outfile = f"E-{args.n_entities}_{args.D}_d-{args.depth}_p-{args.precision}_{args.lt_mode}.tsv"
     else: 

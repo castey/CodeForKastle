@@ -7,6 +7,7 @@ def gen_entity_array(n: int):
     return [f"E{i}" for i in range(n)]
 
 def random_from_distribution(dist: str, low: float, high: float, precision: Optional[int] = None) -> float:
+    """Generate a single random value"""
     if dist == "uniform":
         val = np.random.uniform(low, high)
     elif dist == "normal":

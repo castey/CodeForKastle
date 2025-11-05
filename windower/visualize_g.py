@@ -58,12 +58,12 @@ def embed_and_plot(model, seed, training_epochs, dimensionality):
         print(f"Training {model}...")
         result = pipeline(
             training=training,
-            dimensions=dimensionality,
             testing=testing,
             validation=validation,
             model=model,
             random_seed=seed,
-            training_kwargs=dict(num_epochs=training_epochs),
+            model_kwargs= { 'embedding_dim': dimensionality },
+            training_kwargs={ "num_epochs": training_epochs }
         )
 
         print(f"Training complete for {base_name}!")
@@ -306,9 +306,9 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
     print(f"\n[Saved all plots for {basename}] → {os.path.abspath(outdir)}")
     return entity_df
 
-# MuRE dimensionality default = 200
-# TransE dimensionality default = 50 
-# TransR dimensionality default = 50 
-# TransD dimensionality default = 50 
+# MuRE dimensionality default = 200 range(50,300)
+# TransE dimensionality default = 50 range(50,300)
+# TransR dimensionality default = 50 range not given 
+# TransD dimensionality default = 50 range not given
 
-embed_and_plot(model="MuRE", seed=seed, training_epochs=100, dimensionality=200)
+embed_and_plot(model="MuRE", seed=seed, training_epochs=100, dimensionality=300)

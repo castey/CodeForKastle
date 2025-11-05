@@ -5,6 +5,7 @@ APIs of scientific publishers to download papers from scientific publishers
 
 Completed:
 - Elsevier (10.1016) https://dev.elsevier.com/
+- Wiley (10.1002) https://github.com/WileyLabs/tdm-client?tab=readme-ov-file#wiley-tdm-client
 
 Will likely be able to support:
 
@@ -14,7 +15,7 @@ Will likely be able to support:
 - AIP (10.1063)
 - APS / Physical Review (10.1103)
 - ACS (10.1021)
-- Wiley (10.1002) - in progress, needs testing! https://github.com/WileyLabs/tdm-client?tab=readme-ov-file#wiley-tdm-client
+- Wiley () - in progress, needs testing! 
 - MDPI (10.3390)
 
 UM IDK???:
@@ -29,6 +30,10 @@ Will likely not be able to support:
 - Royal Society of Chemistry (10.1039) why do I have an API key for this???????? (ok I think the API is )
 - AIAA (10.2514)
 - Smaller / niche publishers (e.g., 10.3144)
+
+
+Notes meeting October 30th:
+
 
 '''
 
