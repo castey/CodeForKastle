@@ -147,7 +147,6 @@ if __name__ == "__main__":
         "recyclable polymers"
     ]
 
-
     harvest_crossref_cursor_multi(
         queries=polymer_queries,
         rows=1000,
