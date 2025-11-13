@@ -15,10 +15,10 @@ def harvest_crossref_cursor_multi(
     """
     Harvest Crossref metadata using cursor-based pagination for multiple queries.
     Keeps only key fields, deduplicates by DOI, and streams results to disk.
-    Simultaneously tracks per-query counts in a separate JSON stats file.
+    Simultaneously tracks per-query counts and cursor checkpoints in a stats file.
     """
 
-    headers = {"User-Agent": f"PolymerHarvester/2.1 (mailto:{email})"}
+    headers = {"User-Agent": f"PolymerHarvester/2.2 (mailto:{email})"}
     base_url = "https://api.crossref.org/works"
 
     # Initialize storage
@@ -26,7 +26,7 @@ def harvest_crossref_cursor_multi(
     seen_dois = set()
     query_stats = {}
 
-    # Resume if existing files are found
+    # Resume from saved files
     if os.path.exists(outfile):
         print(f"Resuming from existing {outfile}...")
         with open(outfile, "r", encoding="utf-8") as f:
@@ -43,10 +43,20 @@ def harvest_crossref_cursor_multi(
     # Process each search term
     for query in queries:
         print(f"\n🔍 Starting query: '{query}'")
-        cursor = "*"
-        fetched = 0
+
+        # Load previous cursor if available
+        cursor = query_stats.get(query, {}).get("last_cursor", "*")
+        if cursor != "*":
+            print(f"⏩ Resuming from saved cursor for '{query}'.")
+
+        fetched = query_stats.get(query, {}).get("total_records", 0)
+        query_stats.setdefault(query, {
+            "total_records": fetched,
+            "unique_records": query_stats.get(query, {}).get("unique_records", 0),
+            "last_cursor": cursor
+        })
+
         retries = 0
-        query_stats.setdefault(query, {"total_records": 0, "unique_records": 0})
 
         while True:
             params = {
@@ -68,6 +78,8 @@ def harvest_crossref_cursor_multi(
 
                 data = resp.json().get("message", {})
                 items = data.get("items", [])
+                next_cursor = data.get("next-cursor")
+
                 if not items:
                     print("No more items for this query.")
                     break
@@ -92,17 +104,15 @@ def harvest_crossref_cursor_multi(
                     new_items += 1
 
                 fetched += len(items)
-                cursor = data.get("next-cursor")
-
-                # Update statistics
                 query_stats[query]["total_records"] += len(items)
                 query_stats[query]["unique_records"] += new_items
+                query_stats[query]["last_cursor"] = next_cursor
 
                 print(f"Fetched {fetched:,} records for '{query}' "
                       f"({new_items:,} new unique; total unique {len(seen_dois):,}).")
 
                 # Periodic save of both metadata and stats
-                if len(all_metadata) % save_every < rows or not cursor:
+                if len(all_metadata) % save_every < rows or not next_cursor:
                     with open(outfile, "w", encoding="utf-8") as f:
                         json.dump(all_metadata, f, indent=2)
                     with open(statsfile, "w", encoding="utf-8") as f:
@@ -115,11 +125,12 @@ def harvest_crossref_cursor_multi(
                     print(f"Reached {max_records_per_query:,} record cap for '{query}'.")
                     break
 
-                # Stop if no more pages
-                if not cursor:
+                if not next_cursor:
+                    print(f"✅ No next cursor for '{query}'. Finished.")
                     break
 
-                time.sleep(1)  # rate control
+                cursor = next_cursor
+                time.sleep(1)
 
             except Exception as e:
                 print(f"⚠️ Error: {e}. Retrying in 60s...")
@@ -141,13 +152,13 @@ def harvest_crossref_cursor_multi(
 
     print(f"\n✅ Harvest complete.")
     print(f"📦 {len(all_metadata):,} total unique records saved to {outfile}.")
-    print(f"📈 Per-query stats saved to {statsfile}.")
+    print(f"📈 Per-query stats and cursors saved to {statsfile}.")
 
 
 if __name__ == "__main__":
     polymer_queries = [
-        "polymer",
-        "polymer science",
+        #"polymer",
+        #"polymer science",
         "polymer chemistry",
         "polymer physics",
         "polymer synthesis",

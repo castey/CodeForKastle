@@ -15,3 +15,6 @@ KGs/
 KGsOnStandby/
 polymer_metadata_cleaned.json
 paper-scraper/crossref_env
+polymer_query_stats.json
+crossref_run.log 
+polymer_metadata_cleaned_copy.json
