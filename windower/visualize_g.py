@@ -16,7 +16,7 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 # others
 import pandas as pd
-import random, torch, os
+import random, torch, os, re
 import numpy as np
 
 # seed random and torch with predefined fixed seed
@@ -71,13 +71,94 @@ def embed_and_plot(model, seed, training_epochs, dimensionality):
         # dimensionality reduction and plotting
         reduce_and_plot(result=result, val_file=val_file, basename=f"{base_name}_{model}_DE-{dimensionality}", only_entities=True)
 
+def plot_distances(values, mean_val, std_val,
+                   cos_sims=None, mean_cos=None, std_cos=None,
+                   metric_title="L₂ Distance",
+                   comparison_label="Embedded vs. Expected E₃",
+                   outpath=None):
+    """
+    Generic plotter for distance or similarity metrics.
+
+    Parameters
+    ----------
+    values : list or np.ndarray
+        Metric values to plot (L2, cosine, etc.)
+    mean_val : float
+        Mean of the primary metric.
+    std_val : float
+        Standard deviation of the primary metric.
+    cos_sims : list, optional
+        Optional cosine similarity values for a second plot.
+    mean_cos, std_cos : float, optional
+        Mean and SD for the cosine similarities.
+    metric_title : str
+        Axis label for the y-axis ("L₂ Distance", "Cosine Similarity", etc.)
+    comparison_label : str
+        Used in titles/filenames to describe what’s being compared.
+    outpath : str
+        Output path for saving plots (as SVGs).
+    """
+    plt.ioff()
+
+    # === 1. PRIMARY METRIC (bars) ===
+    fig, ax = plt.subplots(figsize=(10, 6))
+    indices = np.arange(len(values))
+    ax.bar(indices, values, color="steelblue", alpha=0.85,
+           edgecolor="black", linewidth=0.4)
+
+    # Annotate mean ± SD
+    ax.axhline(mean_val, color="red", linestyle="--", linewidth=1.2,
+               label=f"Mean = {mean_val:.3f}")
+    ax.axhline(mean_val + std_val, color="gray", linestyle=":",
+               linewidth=0.8, label=f"±SD = {std_val:.3f}")
+    ax.axhline(mean_val - std_val, color="gray", linestyle=":", linewidth=0.8)
+
+    ax.set_title(f"{metric_title} — {comparison_label}", fontsize=13)
+    ax.set_xlabel("Triplet Index", fontsize=11)
+    ax.set_ylabel(metric_title, fontsize=11)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+
+    if outpath:
+        base = os.path.splitext(outpath)[0]
+        svg_path = f"{base}_{comparison_label.replace(' ', '_')}_L2.svg"
+        plt.savefig(svg_path, format="svg", bbox_inches="tight")
+        print(f"[Saved {metric_title} bar plot] {svg_path}")
+    plt.close(fig)
+
+    # === 2. COSINE SIMILARITY (optional) ===
+    if cos_sims is not None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        indices = np.arange(len(cos_sims))
+        ax.bar(indices, cos_sims, color="orange", alpha=0.8,
+               edgecolor="black", linewidth=0.4)
+
+        ax.axhline(mean_cos, color="red", linestyle="--", linewidth=1.2,
+                   label=f"Mean cos = {mean_cos:.3f}")
+        ax.axhline(mean_cos + std_cos, color="gray", linestyle=":", linewidth=0.8,
+                   label=f"±SD = {std_cos:.3f}")
+        ax.axhline(mean_cos - std_cos, color="gray", linestyle=":", linewidth=0.8)
+
+        ax.set_title(f"Cosine Similarity — {comparison_label}", fontsize=13)
+        ax.set_xlabel("Triplet Index", fontsize=11)
+        ax.set_ylabel("Cosine Similarity", fontsize=11)
+        ax.legend(fontsize=9)
+        plt.tight_layout()
+
+        if outpath:
+            base = os.path.splitext(outpath)[0]
+            svg_path = f"{base}_{comparison_label.replace(' ', '_')}_cosine.svg"
+            plt.savefig(svg_path, format="svg", bbox_inches="tight")
+            print(f"[Saved cosine bar plot] {svg_path}")
+        plt.close(fig)
+    
 # --- classify node type ---
 def classify_node(name):
     if name == "Window_root":
         return "root"
-    elif name.startswith("E"):
+    elif re.match(r"^E\d+$", str(name)):
         return "entity"
-    elif "Window" in name:
+    elif "Window" in str(name):
         return "window"
     else:
         return "other"
@@ -97,60 +178,117 @@ def plot_embedding(entity_df, reduced, title="Embedding Projection", outpath=Non
     Generate two 2D embedding plots:
     1. Gradient version (dodgerblue → red) based on 'initial_values'.
     2. Categorical version using 8 discrete cool→warm color bins.
-    
-    Both include the numeric initialization values printed inside the points:
-        - white text for above-mean values
-        - black text for below-mean values
-    
-    Each saved as an SVG for infinite zoom clarity.
+
+    Windows (gray) and root nodes (red) are shown if present.
+    Displays entity/window counts on each plot.
     """
+
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+    import numpy as np
+    import pandas as pd
+
     entity_df = entity_df.copy()
     entity_df[["x", "y"]] = reduced
 
-    if "initial_values" not in entity_df.columns:
+    # === Split by group type ===
+    has_group = "group" in entity_df.columns
+    entities = entity_df[entity_df["group"] == "entity"] if has_group else entity_df
+    windows = entity_df[entity_df["group"] == "window"] if has_group else pd.DataFrame(columns=entity_df.columns)
+    roots = entity_df[entity_df["group"] == "root"] if has_group else pd.DataFrame(columns=entity_df.columns)
+
+    # === Extract numeric values ===
+    if "initial_values" not in entities.columns:
         print("[WARN] No 'initial_values' column found — skipping color encoding.")
-        return
+        vals = np.zeros(len(entities))
+    else:
+        vals = entities["initial_values"].astype(float)
 
-    vals = entity_df["initial_values"].astype(float)
-    mean_val = vals.mean()
-    plt.ioff()  # no GUI window
-
-    # ==========================================================
-    # 1. GRADIENT PLOT (continuous dodgerblue → red)
-    # ==========================================================
+    mean_val = vals.mean() if len(vals) > 0 else 0
     cmap_grad = LinearSegmentedColormap.from_list("blue_red", ["dodgerblue", "red"])
+
+    # ==========================================================
+    # 1. GRADIENT PLOT
+    # ==========================================================
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    sc = ax.scatter(
-        entity_df.x,
-        entity_df.y,
-        c=vals,
-        cmap=cmap_grad,
-        s=60,
-        alpha=0.9,
-        edgecolor="k",
-        linewidths=0.4,
-        zorder=2,
-    )
+    # --- Windows (if any) ---
+    if len(windows) > 0:
+        ax.scatter(
+            windows.x,
+            windows.y,
+            s=40,
+            color="lightgray",
+            edgecolor="k",
+            linewidths=0.3,
+            alpha=0.7,
+            label="Windows",
+            zorder=1,
+        )
 
-    # Annotate values (white if above mean, black if below)
-    for _, row in entity_df.iterrows():
-        val_str = f"{row.initial_values:.3f}"
-        ax.text(
-            row.x, row.y, val_str,
-            ha="center", va="center",
-            fontsize=2.5,
-            fontweight="medium",
-            color="white" if row.initial_values > mean_val else "black",
+    # --- Roots (if any) ---
+    if len(roots) > 0:
+        ax.scatter(
+            roots.x,
+            roots.y,
+            s=90,
+            color="red",
+            marker="^",
+            edgecolor="k",
+            linewidths=0.4,
+            alpha=0.9,
+            label="Root",
+            zorder=2,
+        )
+
+    # --- Entities ---
+    if len(entities) > 0:
+        sc = ax.scatter(
+            entities.x,
+            entities.y,
+            c=vals,
+            cmap=cmap_grad,
+            s=60,
+            edgecolor="k",
+            linewidths=0.4,
+            label="Entities",
             zorder=3,
         )
 
-    cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Initialization Value", fontsize=12)
+        # Annotate entities with numeric values
+        for _, row in entities.iterrows():
+            val_str = f"{row.initial_values:.3f}" if not pd.isna(row.initial_values) else ""
+            ax.text(
+                row.x, row.y, val_str,
+                ha="center", va="center",
+                fontsize=2.5,
+                fontweight="medium",
+                color="white" if (not pd.isna(row.initial_values) and row.initial_values > mean_val) else "black",
+                zorder=4,
+            )
+
+        # Colorbar
+        cbar = plt.colorbar(sc, ax=ax)
+        cbar.set_label("Initialization Value", fontsize=12)
 
     ax.set_title(f"{title} — Gradient", fontsize=14)
     ax.set_xlabel("Component 1", fontsize=12)
     ax.set_ylabel("Component 2", fontsize=12)
+
+    # === Entity/Window counts ===
+    n_entities = len(entities)
+    n_windows = len(windows) + len(roots)
+    count_text = f"Entities: {n_entities:,} | Windows: {n_windows:,}"
+    ax.text(
+        0.02, 0.98, count_text,
+        transform=ax.transAxes,
+        fontsize=9,
+        fontweight="semibold",
+        color="black",
+        ha="left", va="top",
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.4, alpha=0.8),
+    )
+
     plt.tight_layout()
 
     if outpath:
@@ -161,65 +299,100 @@ def plot_embedding(entity_df, reduced, title="Embedding Projection", outpath=Non
     plt.close(fig)
 
     # ==========================================================
-    # 2. CATEGORICAL PLOT (8 color bins)
+    # 2. CATEGORICAL (8 bins)
     # ==========================================================
-    label_colors = [
-        "#13315C",  # dark navy
-        "#155E75",  # deep teal
-        "#208B82",  # sea green
-        "#34A853",  # muted green
-        "#B7950B",  # gold tone
-        "#DAA520",  # goldenrod
-        "#E6B422",  # amber
-        "#FEE191",  # pastel yellow
-    ]
+    if len(entities) > 0:
+        label_colors = [
+            "#13315C", "#155E75", "#208B82", "#34A853",
+            "#B7950B", "#DAA520", "#E6B422", "#FEE191",
+        ]
+        bins = np.linspace(vals.min(), vals.max(), 9)
+        bin_indices = np.digitize(vals, bins) - 1
+        bin_indices = np.clip(bin_indices, 0, 7)
 
-    bins = np.linspace(vals.min(), vals.max(), 9)
-    bin_indices = np.digitize(vals, bins) - 1
-    bin_indices = np.clip(bin_indices, 0, 7)
+        cmap_cat = ListedColormap(label_colors)
+        fig, ax = plt.subplots(figsize=(10, 8))
 
-    cmap_cat = ListedColormap(label_colors)
-    fig, ax = plt.subplots(figsize=(10, 8))
+        # Windows
+        if len(windows) > 0:
+            ax.scatter(
+                windows.x,
+                windows.y,
+                s=40,
+                color="lightgray",
+                edgecolor="k",
+                linewidths=0.3,
+                alpha=0.7,
+                label="Windows",
+                zorder=1,
+            )
 
-    sc = ax.scatter(
-        entity_df.x,
-        entity_df.y,
-        c=bin_indices,
-        cmap=cmap_cat,
-        s=60,
-        alpha=0.9,
-        edgecolor="k",
-        linewidths=0.4,
-        zorder=2,
-    )
+        # Roots
+        if len(roots) > 0:
+            ax.scatter(
+                roots.x,
+                roots.y,
+                s=90,
+                color="red",
+                marker="^",
+                edgecolor="k",
+                linewidths=0.4,
+                alpha=0.9,
+                label="Root",
+                zorder=2,
+            )
 
-    # Annotate values again
-    for _, row in entity_df.iterrows():
-        val_str = f"{row.initial_values:.3f}"
-        ax.text(
-            row.x, row.y, val_str,
-            ha="center", va="center",
-            fontsize=2.5,
-            fontweight="medium",
-            color="white" if row.initial_values > mean_val else "black",
+        # Entities
+        sc = ax.scatter(
+            entities.x,
+            entities.y,
+            c=bin_indices,
+            cmap=cmap_cat,
+            s=60,
+            edgecolor="k",
+            linewidths=0.4,
+            label="Entities",
             zorder=3,
         )
 
-    cbar = plt.colorbar(sc, ax=ax, ticks=np.arange(0.5, 8.5, 1))
-    cbar.ax.set_yticklabels([f"Bin {i+1}" for i in range(8)])
-    cbar.set_label("Initialization Value (Categorical)", fontsize=12)
+        for _, row in entities.iterrows():
+            val_str = f"{row.initial_values:.3f}" if not pd.isna(row.initial_values) else ""
+            ax.text(
+                row.x, row.y, val_str,
+                ha="center", va="center",
+                fontsize=2.5,
+                fontweight="medium",
+                color="white" if (not pd.isna(row.initial_values) and row.initial_values > mean_val) else "black",
+                zorder=4,
+            )
 
-    ax.set_title(f"{title} — Categorical Bins", fontsize=14)
-    ax.set_xlabel("Component 1", fontsize=12)
-    ax.set_ylabel("Component 2", fontsize=12)
-    plt.tight_layout()
+        cbar = plt.colorbar(sc, ax=ax, ticks=np.arange(0.5, 8.5, 1))
+        cbar.ax.set_yticklabels([f"Bin {i+1}" for i in range(8)])
+        cbar.set_label("Initialization Value (Categorical)", fontsize=12)
 
-    if outpath:
-        svg_path = outpath.replace(".png", "_categories.svg")
-        plt.savefig(svg_path, format="svg", bbox_inches="tight")
-        print(f"[Saved Category SVG] {svg_path}")
+        ax.set_title(f"{title} — Categorical Bins", fontsize=14)
+        ax.set_xlabel("Component 1", fontsize=12)
+        ax.set_ylabel("Component 2", fontsize=12)
 
-    plt.close(fig)
+        # Entity/Window count
+        ax.text(
+            0.02, 0.98, count_text,
+            transform=ax.transAxes,
+            fontsize=9,
+            fontweight="semibold",
+            color="black",
+            ha="left", va="top",
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.4, alpha=0.8),
+        )
+
+        plt.tight_layout()
+
+        if outpath:
+            svg_path = outpath.replace(".png", "_categories.svg")
+            plt.savefig(svg_path, format="svg", bbox_inches="tight")
+            print(f"[Saved Category SVG] {svg_path}")
+
+        plt.close(fig)
         
 # --- main pipeline ---
 def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, only_entities=True):
@@ -238,6 +411,10 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
     only_entities : bool
         If True, filter out any Window or Root nodes.
     """
+    import os
+    import pandas as pd
+    import numpy as np
+
     if basename:
         outdir = os.path.join(outdir, basename)
     os.makedirs(outdir, exist_ok=True)
@@ -245,45 +422,126 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
     # --- Extract embeddings and metadata ---
     entity_emb = result.model.entity_representations[0]().detach().numpy()
     entities = list(result.training.entity_to_id.keys())
+    
+    # Sanity check alignment
+    assert entity_emb.shape[0] == len(entities), "Entity count and embedding matrix mismatch!"
+    
+    print(entities)
     entity_df = pd.DataFrame(entity_emb, index=entities)
     entity_df["group"] = [classify_node(e) for e in entity_df.index]
+    
+    def natural_sort_key(label):
+        match = re.match(r"([A-Za-z]+)(\d+)", label)
+        if match:
+            prefix, num = match.groups()
+            return (prefix, int(num))
+        return (label, 0)
 
-    # --- Filter to only entities ---
+    # kick out windows
+    entity_df_4_mean = entity_df[entity_df["group"] == "entity"]
+    entity_df_4_mean = entity_df_4_mean.select_dtypes(include=[np.number])
+    
+    sorted_pairs = sorted(zip(entity_df_4_mean.index, entity_df_4_mean.values), key=lambda x: natural_sort_key(x[0]))
+    entity_tuples = [(label, np.array(vec, dtype=float)) for label, vec in sorted_pairs]
+    
+    # --- Extended mean relationship test ---
+    L2_expected, L2_embedded = [], []
+    L2_parent_expected, L2_parent_embedded = [], []
+    cos_sims = []
+    triplet_labels = []
+
+    for i in range(0, len(entity_tuples) - 2, 3):
+        e1, v1 = entity_tuples[i]
+        e2, v2 = entity_tuples[i + 1]
+        e3, v3 = entity_tuples[i + 2]   # embedded E3
+
+        # Expected mean vector
+        calc_avg = (v1 + v2) / 2
+
+        # --- Main metric: E₃_expected ↔ E₃_embedded ---
+        L2_exp_emb = np.linalg.norm(calc_avg - v3)
+        L2_expected.append(L2_exp_emb)
+
+        # --- Additional diagnostics ---
+        # Distance from E₁/E₂ to expected E₃
+        L2_parent_expected.extend([
+            np.linalg.norm(v1 - calc_avg),
+            np.linalg.norm(v2 - calc_avg)
+        ])
+
+        # Distance from E₁/E₂ to embedded E₃
+        L2_parent_embedded.extend([
+            np.linalg.norm(v1 - v3),
+            np.linalg.norm(v2 - v3)
+        ])
+
+        # Cosine similarity of expected vs. embedded E₃
+        cos_sim = np.dot(calc_avg, v3) / (np.linalg.norm(calc_avg) * np.linalg.norm(v3))
+        cos_sims.append(cos_sim)
+
+        triplet_labels.append((e1, e2, e3))
+
+    # --- Summaries ---
+    def stats(arr):
+        return np.mean(arr), np.std(arr)
+
+    avg_exp, std_exp = stats(L2_expected)
+    avg_pExp, std_pExp = stats(L2_parent_expected)
+    avg_pEmb, std_pEmb = stats(L2_parent_embedded)
+    avg_cos, std_cos = stats(cos_sims)
+
+    print(f"\nE₃_expected ↔ E₃_embedded: {avg_exp:.4f} ± {std_exp:.4f}")
+    print(f"E₁/E₂ ↔ E₃_expected: {avg_pExp:.4f} ± {std_pExp:.4f}")
+    print(f"E₁/E₂ ↔ E₃_embedded: {avg_pEmb:.4f} ± {std_pEmb:.4f}")
+    print(f"Cos sim (expected, embedded E₃): {avg_cos:.4f} ± {std_cos:.4f}")
+
+    # --- Plots ---
+    plot_distances(L2_expected, avg_exp, std_exp,
+                cos_sims=cos_sims, mean_cos=avg_cos, std_cos=std_cos,
+                metric_title="L₂ Distance",
+                comparison_label="E₃ Expected vs. Embedded",
+                outpath=os.path.join(outdir, f"{basename}_E3_expected_vs_embedded.svg"))
+
+    plot_distances(L2_parent_expected, avg_pExp, std_pExp,
+                metric_title="L₂ Distance",
+                comparison_label="Parents vs. E₃ Expected",
+                outpath=os.path.join(outdir, f"{basename}_parent_to_expected.svg"))
+
+    plot_distances(L2_parent_embedded, avg_pEmb, std_pEmb,
+                metric_title="L₂ Distance",
+                comparison_label="Parents vs. E₃ Embedded",
+                outpath=os.path.join(outdir, f"{basename}_parent_to_embedded.svg"))
+
+    # --- Filter and merge initialization values ---
     if only_entities:
+        # Just entities
         entity_df = entity_df[entity_df["group"] == "entity"]
-        
-        # grab the values from the windower initialization to merge to dataframe
-        vals_df = pd.read_csv(f"KGs/{val_file}", sep="\t", header=None, names=["entity", "initial_values"])
-        vals_df = vals_df.set_index("entity")
-        
-        # merge by "entity" as index
-        entity_df = entity_df.join(vals_df, how="left")
-        
-        # === Debug printout ===
-        print("\n[DEBUG] entity_df summary after merge:")
-        print("Shape:", entity_df.shape)
-        print("Columns:", list(entity_df.columns))
-        print("\nColumn dtypes:\n", entity_df.dtypes)
+        print("[INFO] Visualizing entities only.")
+    elif only_entities is False:
+        # Keep all nodes (entities + windows + roots)
+        print("[INFO] Visualizing all node types (entities, windows, roots).")
 
-        # Show a few sample initialization values with entity labels
-        print("\nSample initialization values (entity → init_value):")
-        print(entity_df["initial_values"].head(10))  # top 10 entities
-        print("\nRandom sample of initialization values:")
-        print(entity_df["initial_values"].sample(10, random_state=42))
+    # Load initialization values (these only apply to 'entity' nodes)
+    vals_df = pd.read_csv(f"KGs/{val_file}", sep="\t", header=None, names=["entity", "initial_values"])
+    vals_df = vals_df.set_index("entity")
 
-        # Show missing (NaN) values, if any
-        # Show missing (NaN) values, if any
-        missing_mask = entity_df["initial_values"].isna()
-        missing_count = missing_mask.sum()
+    # Merge the initialization values onto the dataframe (non-entities will get NaN)
+    entity_df = entity_df.join(vals_df, how="left")
 
-        print(f"\n[INFO] Missing initialization values: {missing_count}")
+    # --- Debug info ---
+    print("\n[DEBUG] entity_df summary after merge:")
+    print("Shape:", entity_df.shape)
+    print("Group counts:\n", entity_df["group"].value_counts())
+    print("Columns:", list(entity_df.columns))
+    print("\nColumn dtypes:\n", entity_df.dtypes)
 
-        if missing_count > 0:
-            missing_entities = entity_df.index[missing_mask].tolist()
-            print("[DEBUG] Entities missing initialization values:")
-            for e in missing_entities:
-                print(f"  - {e}")
-                entity_df = entity_df.dropna(subset=["initial_values"])
+    print("\nSample initialization values (entity → init_value):")
+    print(entity_df["initial_values"].dropna().head(10))
+
+    missing_mask = entity_df["initial_values"].isna()
+    missing_count = missing_mask.sum()
+    print(f"\n[INFO] Missing initialization values (non-entities expected): {missing_count}")
+
 
         # Optional full table if you want to inspect entity–value pairs
         # print(entity_df[["initial_values"]])
@@ -305,6 +563,7 @@ def reduce_and_plot(result, val_file, outdir="embedding_plots", basename=None, o
 
     print(f"\n[Saved all plots for {basename}] → {os.path.abspath(outdir)}")
     return entity_df
+
 
 # MuRE dimensionality default = 200 range(50,300)
 # TransE dimensionality default = 50 range(50,300)

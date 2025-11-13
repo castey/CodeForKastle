@@ -22,12 +22,12 @@ Look into values inside datapoints on plot
 # 10/28 notes
 ## pre-meeting notes:
 - lobe clusters are related to the rand5_lt relationships
-- dimensionality of MuRE seems to have a negligible effect (ok probably wrong)
+- dimensionality of MuRE seems to have a negligible effect 
 
 ## post-meeting notes:
 generate e1, e2, -> e3 will be the midpoint between e1 and e2 plus some perturbation 
 
-calculate vector midpoint distance between the embeddings of e1 and e2
+calculate vector midpoint distance between the embeddings of e1 and e2 to e3
 
 calculate the distance between this expected vector and the actual learned e3 embedding
 

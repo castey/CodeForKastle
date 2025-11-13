@@ -19,10 +19,12 @@ Arguments:
     --outfile      Path to save the RDF graph ([optional] N-Triples format, .nt recommended
     --lt_mode      Less than relationships mode (sequential, pairwise)
     --precision    Optional precision step size (e.g., 4 for 4 decimal places).
-    --reverse     Reverses the sort order for the calculation of lt (turns lt relationships into gt)
+    --reverse     Reverses the sort order for the ßcalculation of lt (turns lt relationships into gt)
 
 Example:
-    python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4
+python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4
+python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --mean_e3
+python windower.py --n_entities 50 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --mean_e3
 """
 
 import argparse
@@ -75,10 +77,10 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
         # --------- Write window triples ---------
         def add_window_triples(node: Window):
             window_label = f"Window_{node.path.replace('->','_')}"
-            f.write(f"{window_label}\ttype\tWindow\n")
+            #f.write(f"{window_label}\ttype\tWindow\n")
 
             for e, v in node.elements:
-                f.write(f"{e}\ttype\tEntity\n")
+                #f.write(f"{e}\ttype\tEntity\n")
                 f.write(f"{e}\tinWindow\t{window_label}\n")
 
             if node.left:
@@ -192,24 +194,54 @@ if __name__ == "__main__":
     
     # generate entity array
     entity_array = tools.gen_entity_array(args.n_entities)
-
+    print(entity_array)
     # assign random values using chosen distribution and range
     
     # initialize dict
     entities_with_rand_nums = {}
     
-    for entity in entity_array:
-        rand_val = tools.random_from_distribution(
-            args.D,
-            args.low,
-            args.high,
-            args.precision
-        )
+    if args.mean_e3:
+        i = 0
+        while i < args.n_entities:
+            rand_val_1 = tools.random_from_distribution(
+                args.D,
+                args.low,
+                args.high,
+                args.precision
+            )
+            
+            rand_val_2 = tools.random_from_distribution(
+                args.D,
+                args.low,
+                args.high,
+                args.precision
+            )
+            
+            # calculate mean (do we really need the perturbation?)
+            rand_val_3 = (rand_val_1 + rand_val_2)/2 
+            
+            entities_with_rand_nums[entity_array[i]] = rand_val_1
+            if i + 1 < args.n_entities:
+                entities_with_rand_nums[entity_array[i + 1]] = rand_val_2
+            if i + 2 < args.n_entities:
+                entities_with_rand_nums[entity_array[i + 2]] = rand_val_3
+            i += 3
         
-        entities_with_rand_nums[entity] = rand_val
+    else:
+        for entity in entity_array:
+            rand_val = tools.random_from_distribution(
+                args.D,
+                args.low,
+                args.high,
+                args.precision
+            )    
+            entities_with_rand_nums[entity] = rand_val
         
     if not args.outfile:
-        outfile = f"E-{args.n_entities}_{args.D}_d-{args.depth}_p-{args.precision}_{args.lt_mode}.tsv"
+        e3 = ""
+        if args.mean_e3:
+            e3 = "e3"
+        outfile = f"E-{args.n_entities}_{args.D}_d-{args.depth}_p-{args.precision}_{args.lt_mode}{e3}.tsv"
     else: 
         outfile = args.outfile
     # run pipeline
