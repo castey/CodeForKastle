@@ -17,7 +17,7 @@ Arguments:
     --high         Upper bound for distribution (default: 10.0)
     --verbose      Print details of the pipeline (default: True)
     --outfile      Path to save the RDF graph ([optional] N-Triples format, .nt recommended
-    --lt_mode      Less than relationships mode (sequential, pairwise)
+    --lt_mode      Less than relationships mode (sequential, pairwise, pairwise5, pairwise10)
     --precision    Optional precision step size (e.g., 4 for 4 decimal places).
     --reverse     Reverses the sort order for the ßcalculation of lt (turns lt relationships into gt)
 
@@ -25,6 +25,17 @@ Example:
 python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4
 python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --mean_e3
 python windower.py --n_entities 50 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode rand5 --precision 4 --mean_e3
+python windower.py --n_entities 1000 --depth 16 --D uniform --low 0.0 --high 1.0 --lt_mode sequential --precision 4 --mean_e3
+
+
+python windower.py --n_entities 5000 --depth 8 --D uniform --low 0.0 --high 1.0 --lt_mode sequential --precision 4 --mean_e3
+
+python windower.py --n_entities 5000 --depth 8 --D uniform --low 0.0 --high 1.0 --lt_mode pairwise5 --precision 4 --mean_e3
+
+python windower.py --n_entities 5000 --depth 8 --D uniform --low 0.0 --high 1.0 --lt_mode pairwise10 --precision 4 --mean_e3
+
+python windower.py --n_entities 5000 --depth 8 --D uniform --low 0.0 --high 1.0 --lt_mode pairwise --precision 4 --mean_e3
+
 """
 
 import argparse
@@ -77,10 +88,10 @@ def build_kg(root: Window, norm_pairs: List[Tuple[str, float]], outfile: str, lt
         # --------- Write window triples ---------
         def add_window_triples(node: Window):
             window_label = f"Window_{node.path.replace('->','_')}"
-            #f.write(f"{window_label}\ttype\tWindow\n")
+            f.write(f"{window_label}\ttype\tWindow\n")
 
             for e, v in node.elements:
-                #f.write(f"{e}\ttype\tEntity\n")
+                f.write(f"{e}\ttype\tEntity\n")
                 f.write(f"{e}\tinWindow\t{window_label}\n")
 
             if node.left:
